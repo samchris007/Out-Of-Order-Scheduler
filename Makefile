@@ -6,10 +6,10 @@ WARN = -Wall
 CFLAGS = $(OPT) $(STANDARD) $(WARN) $(INC) $(LIB)
 
 # List all your .cc/.cpp files here (source files, excluding header files)
-SIM_SRC = sim_proc.cc
+SIM_SRC = sim.cc
 
 # List corresponding compiled object files here (.o files)
-SIM_OBJ = sim_proc.o
+SIM_OBJ = sim.o
  
 #################################
 
