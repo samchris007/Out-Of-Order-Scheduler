@@ -31,12 +31,6 @@ int main (int argc, char* argv[])
     opTypeByLatency[0] = 1;
     opTypeByLatency[1] = 2;
     opTypeByLatency[2] = 5;
-    // argv[0] = strdup("C:\\Users\\samch\\OneDrive\\Documents\\NCSU\\563\\Out-Of-Order-Scheduler\\sim.exe");
-    // argv[1] = strdup("16");
-    // argv[2] = strdup("8");
-    // argv[3] = strdup("2");
-    // argv[4] = strdup("C:\\Users\\samch\\OneDrive\\Documents\\NCSU\\563\\Out-Of-Order-Scheduler\\benchmark_traces\\val_trace_gcc1");
-    // argc = 5;
     if (argc != 5)
     {
         printf("Error: Wrong number of inputs:%d\n", argc-1);
@@ -47,10 +41,6 @@ int main (int argc, char* argv[])
     params.iq_size      = strtoul(argv[2], NULL, 10);
     params.width        = strtoul(argv[3], NULL, 10);
     trace_file          = argv[4];
-    printf("rob_size:%lu "
-            "iq_size:%lu "
-            "width:%lu "
-            "tracefile:%s\n", params.rob_size, params.iq_size, params.width, trace_file);
     // Open trace_file in read mode
     FP = fopen(trace_file, "r");
     if(FP == NULL)
@@ -60,17 +50,8 @@ int main (int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
     unsigned long currentCycleCount = 0;
-    Scheduler outOfOrderScheduler = Scheduler(FP, params.width, params.rob_size, params.iq_size, currentCycleCount);
     unsigned long fetchedInstructions = 0;
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
-    //
-    // The following loop just tests reading the trace and echoing it back to the screen.
-    //
-    // Replace this loop with the "do { } while (Advance_Cycle());" loop indicated in the Project 3 spec.
-    // Note: fscanf() calls -- to obtain a fetch bundle worth of instructions from the trace -- should be
-    // inside the Fetch() function.
-    //
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+    Scheduler outOfOrderScheduler = Scheduler(FP, params.width, params.rob_size, params.iq_size, currentCycleCount);
     do
     {
         outOfOrderScheduler.RetireInstructions();
@@ -89,7 +70,8 @@ int main (int argc, char* argv[])
         return a.instructionSequenceNumber < b.instructionSequenceNumber;
     });
     
-    for (auto& instruction : outOfOrderScheduler.FinalInstructions) {
+    for (auto& instruction : outOfOrderScheduler.FinalInstructions) 
+    {
         printf("%d fu{%d} src{%d,%d} dst{%d} FE{%d,%d} DE{%d,%d} RN{%d,%d} RR{%d,%d} DI{%d,%d} IS{%d,%d} EX{%d,%d} WB{%d,%d} RT{%d,%d}\n", 
             instruction.instructionSequenceNumber, 
             instruction.OpType, 
@@ -116,5 +98,20 @@ int main (int argc, char* argv[])
             instruction.GetEndCycleValueForRegister(PipelineRegister::RT)
             );
     }
+
+    printf("# === Simulator Command =========\n");
+    printf("# %s "
+            "%lu "
+            "%lu "
+            "%lu "
+            "%s\n", argv[0], params.rob_size, params.iq_size, params.width, trace_file);
+    printf("# === Processor Configuration ===\n");
+    printf("# ROB_SIZE = %lu\n", params.rob_size);
+    printf("# IQ_SIZE = %lu\n", params.iq_size);
+    printf("# WIDTH = %lu\n", params.width);
+    printf("# === Simulation Results ========\n");
+    printf("# Dynamic Instruction Count    = %lu\n", fetchedInstructions);
+    printf("# Cycles                       = %lu\n", currentCycleCount);
+    printf("# Instructions Per Cycle (IPC) = %1.2f\n", (float)fetchedInstructions/currentCycleCount);
     return 0;
 }
