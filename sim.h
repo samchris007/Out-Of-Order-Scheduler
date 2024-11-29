@@ -7,6 +7,28 @@ typedef struct proc_params{
     unsigned long int width;
 }proc_params;
 
-// Put additional data structures here as per your requirement
+enum PipelineRegister {
+    FE,
+    DE,
+    RN,
+    RR,
+    DI,
+    IS,
+    EX,
+    WB,
+    RT
+};
+
+struct CycleInfo {
+    int start;
+    int finish;
+};
+
+struct RenameMapElement
+{
+    int RegisterIndex;
+    int RobValue;
+    bool Valid;
+};
 
 #endif

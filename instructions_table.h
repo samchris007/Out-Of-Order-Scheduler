@@ -6,6 +6,8 @@
 
 using namespace std;
 
+/// @class InstructionsTable
+/// @brief Base class that contains queue of instructions.
 class InstructionsTable
 {
     public:
@@ -16,6 +18,8 @@ class InstructionsTable
             size = queue_size;
         }
         
+        /// @brief Pushes instruction at the end of the queue.
+        /// @param instruction Instruction to be pushed
         void PushInstruction(Instruction instruction)
         {
             if (InstructionsQueue.size() >= size)
@@ -25,37 +29,46 @@ class InstructionsTable
             InstructionsQueue.push(instruction);
         }
         
+        /// @brief Removes instruction at the head of the queue.
+        /// @param instruction Instruction to be popped
         void PopInstruction()
         {
             InstructionsQueue.pop();
         }
 
+        /// @brief Gets the head instruction of the queue.
         Instruction Front()
         {
             return InstructionsQueue.front();
         }
-
+        
+        /// @brief Gets the size of the queue.
         unsigned long GetSize()
         {
             return InstructionsQueue.size();
         }
 
+        /// @brief Gets whether the queue is empty or not.
         bool IsEmpty()
         {
-            return InstructionsQueue.size() == 0;
+            return InstructionsQueue.empty();
         }
 
+        /// @brief Gets whether the queue is full or not.
         bool IsFull()
         {
             return InstructionsQueue.size() == size;
         }
-
-        unsigned long FreeEntries()
+        
+        /// @brief Gets the free entries of the queue.
+        unsigned long GetFreeEntries()
         {
             return size - InstructionsQueue.size();
         }
 
-        void CheckAndWakeupSourceOperandsInInstructions(int destinationRobValue)
+        /// @brief Checks and sets the readiness of the source registers
+        /// @param robValue Reorder buffer value
+        void CheckAndWakeupSourceOperandsInInstructions(int robValue)
         {
             std::queue<Instruction> tempQueue;
 
@@ -64,14 +77,14 @@ class InstructionsTable
             {
                 Instruction instruction = InstructionsQueue.front();
                 if (instruction.SourceRegister1.HasRobValue 
-                    && instruction.SourceRegister1.Value == destinationRobValue) 
+                    && instruction.SourceRegister1.Value == robValue) 
                 {
-                    instruction.SourceRegister1.isReady = true;
+                    instruction.SourceRegister1.IsReady = true;
                 }
                 if (instruction.SourceRegister2.HasRobValue 
-                    && instruction.SourceRegister2.Value == destinationRobValue) 
+                    && instruction.SourceRegister2.Value == robValue) 
                 {
-                    instruction.SourceRegister2.isReady = true;
+                    instruction.SourceRegister2.IsReady = true;
                 }
                 tempQueue.push(instruction);
                 InstructionsQueue.pop();

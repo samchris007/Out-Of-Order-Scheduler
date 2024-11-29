@@ -9,11 +9,12 @@
 
 using namespace std;
 
+/// @class IssueQueue
+/// @brief Provides an abstract layer for IssueQueue
 class IssueQueue
 {
     public:
         Instruction* issueQueue;
-        int lastlyAddedElementIndex = 0;
         unsigned long size;
 
         IssueQueue(int iqSize)
@@ -28,27 +29,9 @@ class IssueQueue
                 issueQueue[i] = instruction;
             }
         }
-        
-        void AddElements(InstructionsTable &instructions)
-        {
-            for (int i = 0; i < size; i++)
-            {
-                if (instructions.IsEmpty())
-                {
-                    return;
-                }
 
-                if (issueQueue[i].InstructionValidInIQ == false)
-                {
-                    Instruction instruction = instructions.Front();
-                    instruction.InstructionValidInIQ = true;
-                    issueQueue[i] = instruction;
-                    instructions.PopInstruction();
-                }
-            }
-        }
-
-        int FreeIQEntries()
+        /// @brief Gets free issue queue entries
+        int GetFreeIssueQueueEntries()
         {
             int totalFreeEntries = 0;
             for (int i = 0; i < size; i++)
@@ -61,47 +44,33 @@ class IssueQueue
             return totalFreeEntries;
         }
 
-        Instruction GetOldestSequenceInstruction(int &oldestInstructionIndex)
-        {
-            unsigned long min_seq_no = numeric_limits<unsigned long>::max();
-            Instruction minEntry;
-
-            for (int i = 0; i < size; i++) 
-            {
-                if (issueQueue[i].InstructionValidInIQ 
-                    && issueQueue[i].instructionSequenceNumber < min_seq_no
-                    && issueQueue[i].instructionSequenceNumber != -1) 
-                {
-                    min_seq_no = issueQueue[i].instructionSequenceNumber;
-                    minEntry = issueQueue[i];
-                    oldestInstructionIndex = i;
-                }
-            }
-            return minEntry;
-        }
-
-        void CheckAndWakeupSourceOperandsInInstructions(int destinationRobValue)
+        /// @brief Checks and sets the readiness of the source registers
+        /// @param robValue Reorder buffer value
+        void CheckAndWakeupSourceOperandsInInstructions(int robValue)
         {
             for (int i = 0; i < size; i++)
             {
                 if (issueQueue[i].SourceRegister1.HasRobValue 
-                    && issueQueue[i].SourceRegister1.Value == destinationRobValue) 
+                    && issueQueue[i].SourceRegister1.Value == robValue) 
                 {
-                    issueQueue[i].SourceRegister1.isReady = true;
+                    issueQueue[i].SourceRegister1.IsReady = true;
                 }
                 if (issueQueue[i].SourceRegister2.HasRobValue 
-                    && issueQueue[i].SourceRegister2.Value == destinationRobValue) 
+                    && issueQueue[i].SourceRegister2.Value == robValue) 
                 {
-                    issueQueue[i].SourceRegister2.isReady = true;
+                    issueQueue[i].SourceRegister2.IsReady = true;
                 }
             }
         }
 
+        /// @brief Finds whether the issue queue is empty or not
         bool IsEmpty()
         {
-            return FreeIQEntries() == size;
+            return GetFreeIssueQueueEntries() == size;
         }
 
+        /// @brief Sets the validity of the element by index
+        /// @param index Index of the issue queue
         void RemoveElementAtIndex(int index)
         {
             issueQueue[index].InstructionValidInIQ = false;

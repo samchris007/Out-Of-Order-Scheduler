@@ -5,7 +5,6 @@
 #include <math.h>
 #include <queue>
 #include <vector>
-#include <algorithm>
 #include "sim.h"
 #include "instruction.h"
 #include "instructions_table.h"
@@ -27,7 +26,6 @@ class Scheduler {
         ReorderBuffer ReorderBufferQueue;
         IssueQueue IssueBuffer;
         unsigned long &CurrentCyclesCount;
-        bool FileReadComplete = false;
 
         vector<Instruction> FinalInstructions;
 
@@ -89,12 +87,9 @@ class Scheduler {
                                                     CurrentCyclesCount);
                 
                 instruction.SetEndCycleForRegister(PipelineRegister::FE, CurrentCyclesCount);
-                instruction.SetEndCycleForRegister(PipelineRegister::FE, CurrentCyclesCount - instruction.registerCycles[PipelineRegister::FE].beginCycle + 1);
+                instruction.SetEndCycleForRegister(PipelineRegister::FE, CurrentCyclesCount - instruction.registerCycles[PipelineRegister::FE].start + 1);
                 instruction.SetBeginCycleForRegister(PipelineRegister::DE, CurrentCyclesCount + 1);
                 Decoder.PushInstruction(instruction);
-
-                // printf("Fetching Instruction \n");
-                // printf("PC: %lx; OP Type: %d; Destination: %d; Source1: %d; Source2: %d\n", pc, op_type, dest, src1, src2);
                 fetchedInstructionsCount++;
                 if (currentReadLines == tableWidth)
                 {
@@ -118,7 +113,7 @@ class Scheduler {
             while(!Decoder.IsEmpty() && !RenameRegister.IsFull())
             {
                 Instruction instruction = Decoder.Front();
-                instruction.SetEndCycleForRegister(PipelineRegister::DE, CurrentCyclesCount - instruction.registerCycles[PipelineRegister::DE].beginCycle + 1);
+                instruction.SetEndCycleForRegister(PipelineRegister::DE, CurrentCyclesCount - instruction.registerCycles[PipelineRegister::DE].start + 1);
                 instruction.SetBeginCycleForRegister(PipelineRegister::RN, CurrentCyclesCount+1);
                 
                 RenameRegister.PushInstruction(instruction);
@@ -150,42 +145,35 @@ class Scheduler {
         // the rename bundle are in program order).
         void Rename()
         {
-            if (RenameRegister.IsEmpty())
+            if (RenameRegister.IsEmpty()
+                || !ReadRegisterTable.IsEmpty()
+                || ReorderBufferQueue.GetFreeEntries() < RenameRegister.GetSize())
             {
                 return;
             }
-            if (!ReadRegisterTable.IsEmpty() 
-                || ReorderBufferQueue.FreeEntries() < RenameRegister.GetSize())
-            {
-                return;
-            }
-            int totalElementsAdded = 1;
+
             while(!ReorderBufferQueue.IsFull() && !RenameRegister.IsEmpty())
             {
                 Instruction instruction = RenameRegister.Front();
-                int robValue = ReorderBufferQueue.CreateNewEntryAndGetRobValue(instruction, totalElementsAdded);
-                instruction.robValue = robValue;
+                int robValue = ReorderBufferQueue.CreateNewEntryAndGetRobValue(instruction);
+                instruction.RobValue = robValue;
                 CheckIfSourceOperandsHasRMTValues(instruction);
 
                 if (instruction.DestinationRegister.Exist)
                 {
-                    RMT.AddElement(true, robValue, instruction.DestinationRegister.Value);
+                    RMT.AddElement(robValue, instruction.DestinationRegister.Value);
                 }
 
                 instruction.DestinationRegister.Value = robValue;
                 instruction.DestinationRegister.Exist = true;
                 instruction.DestinationRegister.HasRobValue = true;
 
-                instruction.SetEndCycleForRegister(PipelineRegister::RN, CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::RN].beginCycle);
+                instruction.SetEndCycleForRegister(PipelineRegister::RN, CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::RN].start);
                 instruction.SetBeginCycleForRegister(PipelineRegister::RR, CurrentCyclesCount+1);
                 
                 ReadRegisterTable.PushInstruction(instruction);
                 RenameRegister.PopInstruction();
-                totalElementsAdded++;
             }
-
-
-            return;
         }
 
         // If RR contains a register-read bundle:
@@ -215,15 +203,13 @@ class Scheduler {
                 return;
             }
 
-            // Tag Wakeup rob values are replaced with actual register values
-
             while(!ReadRegisterTable.IsEmpty() && !DispatchRegister.IsFull())
             {
                 Instruction instruction  = ReadRegisterTable.Front();
-                instruction.SourceRegister1.isReady = IsRegisterReady(instruction.SourceRegister1);
-                instruction.SourceRegister2.isReady = IsRegisterReady(instruction.SourceRegister2);
+                instruction.SourceRegister1.IsReady = IsRegisterReady(instruction.SourceRegister1);
+                instruction.SourceRegister2.IsReady = IsRegisterReady(instruction.SourceRegister2);
 
-                instruction.SetEndCycleForRegister(PipelineRegister::RR, CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::RR].beginCycle);
+                instruction.SetEndCycleForRegister(PipelineRegister::RR, CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::RR].start);
                 instruction.SetBeginCycleForRegister(PipelineRegister::DI, CurrentCyclesCount+1);
 
                 DispatchRegister.PushInstruction(instruction);
@@ -241,7 +227,8 @@ class Scheduler {
         // the IQ.
         void DispatchInstruction()
         {
-            if (DispatchRegister.IsEmpty() || IssueBuffer.FreeIQEntries() < DispatchRegister.GetSize())
+            if (DispatchRegister.IsEmpty() 
+                || IssueBuffer.GetFreeIssueQueueEntries() < DispatchRegister.GetSize())
             {
                 return;
             }
@@ -250,7 +237,7 @@ class Scheduler {
                 if (IssueBuffer.issueQueue[i].InstructionValidInIQ == false && !DispatchRegister.IsEmpty())
                 {
                     Instruction instruction = DispatchRegister.Front();
-                    instruction.SetEndCycleForRegister(PipelineRegister::DI, CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::DI].beginCycle);
+                    instruction.SetEndCycleForRegister(PipelineRegister::DI, CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::DI].start);
                     instruction.SetBeginCycleForRegister(PipelineRegister::IS, CurrentCyclesCount+1);
 
                     instruction.InstructionValidInIQ = true;
@@ -279,16 +266,17 @@ class Scheduler {
         // latency.
         void IssueInstruction(std::map<int, int> opTypeByLatency)
         {
-            sort(IssueBuffer.issueQueue, IssueBuffer.issueQueue + IqSize, [this](const Instruction& a, const Instruction& b) 
-            {
-            return compareInstructions(a, b);
-            });
-            
             if (IssueBuffer.IsEmpty())
             {
                 return;
             }
+
             int issuedInstructions = 0;
+            sort(IssueBuffer.issueQueue, IssueBuffer.issueQueue + IqSize, [this](const Instruction& a, const Instruction& b) 
+            {
+            return compareInstructions(a, b);
+            });
+
             for (int i = 0; i < IqSize; i++)
             {
                 if (issuedInstructions >= tableWidth)
@@ -296,20 +284,20 @@ class Scheduler {
                     break;
                 }
                 
-                if (IssueBuffer.issueQueue[i].instructionSequenceNumber < 0 
-                || !IssueBuffer.issueQueue[i].InstructionValidInIQ 
-                || !IssueBuffer.issueQueue[i].SourceRegister1.isReady
-                || !IssueBuffer.issueQueue[i].SourceRegister2.isReady)
+                if (IssueBuffer.issueQueue[i].InstructionSequenceNumber < 0 
+                    || !IssueBuffer.issueQueue[i].InstructionValidInIQ 
+                    || !IssueBuffer.issueQueue[i].SourceRegister1.IsReady
+                    || !IssueBuffer.issueQueue[i].SourceRegister2.IsReady)
                 {
                     continue;
                 }
 
                 Instruction instruction = IssueBuffer.issueQueue[i];
-                instruction.SetEndCycleForRegister(PipelineRegister::IS, CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::IS].beginCycle);
-                instruction.SetBeginCycleForRegister(PipelineRegister::EX, CurrentCyclesCount+1);
-                
                 IssueBuffer.RemoveElementAtIndex(i);
-                instruction.latency = opTypeByLatency[instruction.OpType];
+
+                instruction.SetEndCycleForRegister(PipelineRegister::IS, CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::IS].start);
+                instruction.SetBeginCycleForRegister(PipelineRegister::EX, CurrentCyclesCount+1);
+                instruction.Latency = opTypeByLatency[instruction.OpType];
                 ExecutionList.PushInstruction(instruction);
                 issuedInstructions++;
             }
@@ -330,21 +318,21 @@ class Scheduler {
             InstructionsTable tempTable = InstructionsTable(tableWidth*5);
             while (!ExecutionList.IsEmpty())
             {
-                if (ExecutionList.Front().latency == 1)
+                Instruction instruction = ExecutionList.Front();
+                if (ExecutionList.Front().Latency == 1)
                 {
-                    Instruction instruction = ExecutionList.Front();
-                    ReadRegisterTable.CheckAndWakeupSourceOperandsInInstructions(instruction.robValue);
-                    DispatchRegister.CheckAndWakeupSourceOperandsInInstructions(instruction.robValue);
-                    IssueBuffer.CheckAndWakeupSourceOperandsInInstructions(instruction.robValue);
-                instruction.SetEndCycleForRegister(PipelineRegister::EX, 
-                                CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::EX].beginCycle);
-                instruction.SetBeginCycleForRegister(PipelineRegister::WB, CurrentCyclesCount+1);
+                    ReadRegisterTable.CheckAndWakeupSourceOperandsInInstructions(instruction.RobValue);
+                    DispatchRegister.CheckAndWakeupSourceOperandsInInstructions(instruction.RobValue);
+                    IssueBuffer.CheckAndWakeupSourceOperandsInInstructions(instruction.RobValue);
+
+                    instruction.SetEndCycleForRegister(PipelineRegister::EX, 
+                                CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::EX].start);
+                    instruction.SetBeginCycleForRegister(PipelineRegister::WB, CurrentCyclesCount+1);
                     WriteBackBuffer.PushInstruction(instruction);
                 }
                 else
                 {
-                    Instruction instruction = ExecutionList.Front();
-                    instruction.latency--;
+                    instruction.Latency--;
                     tempTable.PushInstruction(instruction);
                 }
                 ExecutionList.PopInstruction();
@@ -372,7 +360,7 @@ class Scheduler {
             {
                 Instruction instruction = WriteBackBuffer.Front();
                 instruction.SetEndCycleForRegister(PipelineRegister::WB, 
-                                CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::WB].beginCycle);
+                                CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::WB].start);
                 instruction.SetBeginCycleForRegister(PipelineRegister::RT, CurrentCyclesCount+1);
                 ReorderBufferQueue.UpdateReadinessOfTheInstruction(instruction.DestinationRegister.Value, 
                     instruction.registerCycles);
@@ -385,27 +373,27 @@ class Scheduler {
         // the ROB.
         void RetireInstructions()
         {
-            int poppedInstructions = 0;
-
             if (ReorderBufferQueue.IsEmpty() 
-                || !ReorderBufferQueue.Front().DestinationRegister.isReady)
+                || !ReorderBufferQueue.Front().DestinationRegister.IsReady)
             {
                 return;
             }
+
+            int poppedInstructions = 0;
             while(!ReorderBufferQueue.IsEmpty() 
-                && ReorderBufferQueue.Front().DestinationRegister.isReady
+                && ReorderBufferQueue.Front().DestinationRegister.IsReady
                 && poppedInstructions < tableWidth)
             {
                 Instruction instruction = ReorderBufferQueue.Front();
                 instruction.SetEndCycleForRegister(PipelineRegister::RT, 
-                                CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::RT].beginCycle);
+                                CurrentCyclesCount+1 - instruction.registerCycles[PipelineRegister::RT].start);
                 FinalInstructions.push_back(instruction);
 
                 RenameMapElement mapElement;
                 if (RMT.TryGetElement(instruction.DestinationRegister.Value, mapElement)
-                    && instruction.robValue == mapElement.RobIndex)
+                    && instruction.RobValue == mapElement.RobValue)
                 {
-                    RMT.RemoveElement(instruction.DestinationRegister.Value);
+                    RMT.RemoveElementAtIndex(instruction.DestinationRegister.Value);
                 }
                 ReorderBufferQueue.PopInstruction();
                 poppedInstructions++;
@@ -429,32 +417,32 @@ class Scheduler {
 
         void CheckIfSourceOperandsHasRMTValues(Instruction& instruction)
         {
-            RenameMapElement sourceRegister1, sourceRegister2, destinationRegister;
-            Register sourceReg1, destReg, sourceReg2;
+            RenameMapElement sourceRegister1, sourceRegister2;
+            Register sourceReg1, sourceReg2;
 
             if (instruction.SourceRegister1.Exist && RMT.TryGetElement(instruction.SourceRegister1.Value, sourceRegister1))
             {
-                sourceReg1 = {sourceRegister1.RobIndex, true, true};
+                sourceReg1 = {sourceRegister1.RobValue, true, true};
                 instruction.SourceRegister1 = sourceReg1;
             }
             if (instruction.SourceRegister2.Exist && RMT.TryGetElement(instruction.SourceRegister2.Value, sourceRegister2)) 
             {
-                sourceReg2= {sourceRegister2.RobIndex, true, true};
+                sourceReg2= {sourceRegister2.RobValue, true, true};
                 instruction.SourceRegister2 = sourceReg2;
             }
         }
 
         bool IsRegisterReady(Register registerVal)
         {
-            if (registerVal.HasRobValue && ReorderBufferQueue.IsRobEntryReady(registerVal.Value)
+            if (registerVal.HasRobValue 
+                && ReorderBufferQueue.IsRobEntryReady(registerVal.Value)
                 || !registerVal.Exist
-                || registerVal.isReady)
+                || registerVal.IsReady)
             {
                 return true;
             }
             else if (!registerVal.HasRobValue && registerVal.Value != -1)
             {
-                // ARF register
                 return true;
             }
             else if (registerVal.HasRobValue && !ReorderBufferQueue.HasRobEntry(registerVal.Value))
@@ -466,7 +454,9 @@ class Scheduler {
 
         bool compareInstructions(const Instruction& a, const Instruction& b) 
         {
-            return a.instructionSequenceNumber>=0 && b.instructionSequenceNumber >= 0 && a.instructionSequenceNumber < b.instructionSequenceNumber;
+            return a.InstructionSequenceNumber>=0 
+                && b.InstructionSequenceNumber >= 0 
+                && a.InstructionSequenceNumber < b.InstructionSequenceNumber;
         }
 };
 

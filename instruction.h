@@ -1,4 +1,4 @@
-#ifndef INSTRUCTION_H   // Include guard to prevent multiple inclusions
+#ifndef INSTRUCTION_H
 #define INSTRUCTION_H
 
 #include <inttypes.h>
@@ -6,50 +6,37 @@
 
 using namespace std;
 
+/// @class Register
+/// @brief Register class for source and destination addresses
 class Register {
     public:
         int Value;
-        bool HasRobValue;
+        bool HasRobValue = false;
         bool Exist = false;
-        bool isReady = false;
+        bool IsReady = false;
 };
 
-struct CycleInfo {
-    int beginCycle;
-    int endCycle;
-};
-
-enum PipelineRegister {
-    FE,
-    DE,
-    RN,
-    RR,
-    DI,
-    IS,
-    EX,
-    WB,
-    RT,
-    ROB
-};
-
+/// @class Instruction
+/// @brief Class that contains information related to a specific instruction
 class Instruction
 {
     public:
-        uint64_t ProgramCounter = 0;
-        Register DestinationRegister;
         int OpType = -1;
+        int RobValue; // Rob value of an instruction. Specific to Reorder buffer
+        int Latency = -1;
+        bool InstructionValidInIQ = false;
+        unsigned long InstructionSequenceNumber = -1;
+
+        uint64_t ProgramCounter = 0;
         Register SourceRegister1;
         Register SourceRegister2;
-        // bool isInstructionReady = false;
-        bool InstructionValidInIQ = false;
-        int robValue;
-        unsigned long instructionSequenceNumber = -1;
-        int latency = -1;
+        Register DestinationRegister;
 
-        // Register names:
-        // FE, DE, RN, RR, DI, IS, EX, WB and RT
+        /// Contains cycle information for each pipeline stages
+        // Pipeline stages: FE, DE, RN, RR, DI, IS, EX, WB and RT
         std::map<PipelineRegister, CycleInfo> registerCycles;
 
+        /// @brief Constructs Instruction class which is used in each piepline stages
         Instruction(uint64_t programCounter, 
                     int opType, 
                     Register destinationRegister, 
@@ -63,38 +50,41 @@ class Instruction
             OpType = opType;
             SourceRegister1 = sourceRegister1;
             SourceRegister2 = sourceRegister2;
-            instructionSequenceNumber = sequenceNumber;
+            InstructionSequenceNumber = sequenceNumber;
 
-            registerCycles[PipelineRegister::FE].beginCycle = initialCycle;
-            registerCycles[PipelineRegister::FE].endCycle = -1;
+            registerCycles[PipelineRegister::FE].start = initialCycle;
+            registerCycles[PipelineRegister::FE].finish = -1;
 
-            registerCycles[PipelineRegister::DE].beginCycle = -1;
-            registerCycles[PipelineRegister::DE].endCycle = -1;
+            registerCycles[PipelineRegister::DE].start = -1;
+            registerCycles[PipelineRegister::DE].finish = -1;
 
-            registerCycles[PipelineRegister::RN].beginCycle = -1;
-            registerCycles[PipelineRegister::RN].endCycle = -1;
+            registerCycles[PipelineRegister::RN].start = -1;
+            registerCycles[PipelineRegister::RN].finish = -1;
 
-            registerCycles[PipelineRegister::RR].beginCycle = -1;
-            registerCycles[PipelineRegister::RR].endCycle = -1;
+            registerCycles[PipelineRegister::RR].start = -1;
+            registerCycles[PipelineRegister::RR].finish = -1;
 
-            registerCycles[PipelineRegister::DI].beginCycle = -1;
-            registerCycles[PipelineRegister::DI].endCycle = -1;
+            registerCycles[PipelineRegister::DI].start = -1;
+            registerCycles[PipelineRegister::DI].finish = -1;
 
-            registerCycles[PipelineRegister::IS].beginCycle = -1;
-            registerCycles[PipelineRegister::IS].endCycle = -1;
+            registerCycles[PipelineRegister::IS].start = -1;
+            registerCycles[PipelineRegister::IS].finish = -1;
 
-            registerCycles[PipelineRegister::EX].beginCycle = -1;
-            registerCycles[PipelineRegister::EX].endCycle = -1;
+            registerCycles[PipelineRegister::EX].start = -1;
+            registerCycles[PipelineRegister::EX].finish = -1;
 
-            registerCycles[PipelineRegister::WB].beginCycle = -1;
-            registerCycles[PipelineRegister::WB].endCycle = -1;
+            registerCycles[PipelineRegister::WB].start = -1;
+            registerCycles[PipelineRegister::WB].finish = -1;
 
-            registerCycles[PipelineRegister::RT].beginCycle = -1;
-            registerCycles[PipelineRegister::RT].endCycle = -1;
+            registerCycles[PipelineRegister::RT].start = -1;
+            registerCycles[PipelineRegister::RT].finish = -1;
         }
 
         Instruction() {};
 
+        /// @brief Attempts to get the ROB value for the destination register.
+        /// @param robValue [out] Reference to an integer where the ROB value will be stored if available.
+        /// @return `true` if the destination register has a valid ROB value, `false` otherwise.
         bool TryGetDestinationRegisterRobValue(int &robValue)
         {
             if (DestinationRegister.HasRobValue)
@@ -105,24 +95,34 @@ class Instruction
             return false;
         }
 
+        /// @brief Sets the start cycle for a specific pipeline register.
+        /// @param registerVal The pipeline register for which the start cycle is to be set.
+        /// @param cycleValue The cycle value to set as the start cycle.
         void SetBeginCycleForRegister(PipelineRegister registerVal, int cycleValue)
         {
-            registerCycles[registerVal].beginCycle = cycleValue;
+            registerCycles[registerVal].start = cycleValue;
         }
         
+        /// @brief Sets the end cycle for a specific pipeline register.
+        /// @param registerVal The pipeline register for which the end cycle is to be set.
+        /// @param cycleValue The cycle value to set as the end cycle.
         void SetEndCycleForRegister(PipelineRegister registerVal, int cycleValue)
         {
-            registerCycles[registerVal].endCycle = cycleValue;
+            registerCycles[registerVal].finish = cycleValue;
         }
 
+        /// @brief Gets the start cycle for a specific pipeline register.
+        /// @param registerVal The pipeline register for which the start cycle is to be obtained.
         int GetBeginCycleValueForRegister(PipelineRegister registerVal)
         {
-            return registerCycles[registerVal].beginCycle;
+            return registerCycles[registerVal].start;
         }
         
+        /// @brief Gets the end cycle for a specific pipeline register.
+        /// @param registerVal The pipeline register for which the end cycle is to be obtained.
         int GetEndCycleValueForRegister(PipelineRegister registerVal)
         {
-            return registerCycles[registerVal].endCycle;
+            return registerCycles[registerVal].finish;
         }
 };
 

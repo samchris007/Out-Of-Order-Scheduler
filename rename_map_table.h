@@ -6,13 +6,8 @@
 
 using namespace std;
 
-struct RenameMapElement
-{
-    int RegisterIndex;
-    int RobIndex;
-    bool Valid;
-};
-
+/// @class RenameMapTable
+/// @brief Class that contains an array of RMT elements by rob values and register indices.
 class RenameMapTable
 {
     public:
@@ -27,18 +22,24 @@ class RenameMapTable
             }
         }
         
-        void AddElement(int isValid, int robIndex, int registerIndex)
+        /// @brief Adds or Updates a new element to the Rename Map table
+        /// @param robIndex Reorder buffer value.
+        /// @param registerIndex Register index/value.
+        void AddElement(int robValue, int registerIndex)
         {
             renameMapTable[registerIndex].RegisterIndex = registerIndex;
-            renameMapTable[registerIndex].RobIndex = robIndex;
-            renameMapTable[registerIndex].Valid = isValid;
+            renameMapTable[registerIndex].RobValue = robValue;
+            renameMapTable[registerIndex].Valid = true;
         }
         
-        void RemoveElement(int registerIndex)
+        /// @brief Removes element at register index.
+        /// @param registerIndex Register index/value.
+        void RemoveElementAtIndex(int registerIndex)
         {
             renameMapTable[registerIndex].Valid = false;
         }
-
+        
+        /// @brief Gets whether the rename map table is empty or not based on the validity.
         bool IsEmpty()
         {
             for (int i = 0; i < size; i++)
@@ -51,6 +52,9 @@ class RenameMapTable
             return true;
         }
 
+        /// @brief Attempts to get the element from the RMT.
+        /// @param renameMapElement [out] Reference to an RMT element where the value will be stored if available.
+        /// @return `true` if the element has a valid ROB value, `false` otherwise.
         bool TryGetElement(int registerIndex, RenameMapElement &renameMapElement)
         {
             if(IsEmpty())

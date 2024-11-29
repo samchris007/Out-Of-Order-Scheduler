@@ -7,17 +7,6 @@
 #include "sim.h"
 #include "out_of_order_scheduler.h"
 
-/*  argc holds the number of command line arguments
-    argv[] holds the commands themselves
-
-    Example:-
-    sim 256 32 4 gcc_trace.txt
-    argc = 5
-    argv[0] = "sim"
-    argv[1] = "256"
-    argv[2] = "32"
-    ... and so on
-*/
 int main (int argc, char* argv[])
 {
     FILE *FP;               // File handler
@@ -67,13 +56,14 @@ int main (int argc, char* argv[])
     } while (outOfOrderScheduler.AdvanceToNextCycle());
 
     sort(outOfOrderScheduler.FinalInstructions.begin(), outOfOrderScheduler.FinalInstructions.end(), [](const Instruction& a, const Instruction& b) {
-        return a.instructionSequenceNumber < b.instructionSequenceNumber;
+        return a.InstructionSequenceNumber < b.InstructionSequenceNumber;
     });
     
+    // Print the final instructions cycle sequentially.
     for (auto& instruction : outOfOrderScheduler.FinalInstructions) 
     {
         printf("%d fu{%d} src{%d,%d} dst{%d} FE{%d,%d} DE{%d,%d} RN{%d,%d} RR{%d,%d} DI{%d,%d} IS{%d,%d} EX{%d,%d} WB{%d,%d} RT{%d,%d}\n", 
-            instruction.instructionSequenceNumber, 
+            instruction.InstructionSequenceNumber, 
             instruction.OpType, 
             instruction.SourceRegister1.Value,
             instruction.SourceRegister2.Value,

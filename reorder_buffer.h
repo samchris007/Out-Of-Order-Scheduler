@@ -7,59 +7,62 @@
 
 using namespace std;
 
+/// @class ReorderBuffer
+/// @brief The class that implements ROB queue
 class ReorderBuffer : public InstructionsTable
 {
     public:
         int tailIndex = -1;
         int lastRemovedElementIndex;
-        ReorderBuffer(unsigned long queue_size) : InstructionsTable (queue_size) {}
-
-        int CreateNewEntryAndGetRobValue(Instruction instruction, int elementsToBeAdded = 0)
+        unsigned long queueSize;
+        
+        ReorderBuffer(unsigned long queue_size) : InstructionsTable (queue_size) 
         {
-            int robValue;
-            if (!InstructionsQueue.empty())
+            queueSize = queue_size;
+        }
+        
+        /// @brief Creates a new entry in the ROB and returns the ROB index value.
+        /// @param instruction The instruction in which a new entry is to be created.
+        int CreateNewEntryAndGetRobValue(Instruction instruction)
+        {
+            if (tailIndex >= queueSize)
             {
-                bool hasRobValue = InstructionsQueue.front().TryGetDestinationRegisterRobValue(robValue);
-                if (hasRobValue && robValue != 0 && tailIndex == (InstructionsQueue.size() - 1))
-                {
-                    tailIndex = lastRemovedElementIndex;
-                    instruction.robValue = lastRemovedElementIndex + elementsToBeAdded;
-                    instruction.DestinationRegister.isReady = false;
-                    InstructionsQueue.push(instruction);
-                    // printf("robValue : %d\n", instruction.robValue); 
-                    return instruction.robValue;
-                }
+                tailIndex = -1;
             }
-            
             tailIndex++;
-            instruction.robValue = tailIndex;
+            instruction.RobValue = tailIndex;
             InstructionsQueue.push(instruction);
-            // printf("robValue : %d\n", instruction.robValue);
-            return instruction.robValue;
+            return instruction.RobValue;
         }
 
+        /// @brief Gets whether the rob entry is ready or not.
+        /// @param robValue Rob value.
         bool IsRobEntryReady(int robValue)
         {
             queue<Instruction> instructions = InstructionsQueue;
             while(!instructions.empty())
             {
-                if(instructions.front().robValue == robValue && instructions.front().DestinationRegister.isReady)
+                if(instructions.front().RobValue == robValue 
+                && instructions.front().DestinationRegister.IsReady)
                 {
                     return true;
                 }
                 instructions.pop();
-            } 
+            }
             return false;
         }
 
+        /// @brief Sets the source registers as ready based on the rob value.
+        /// @param robValue Rob value.
+        /// @param registerCycles Register cycles of each pipeline stages.
         void UpdateReadinessOfTheInstruction(int robValue, std::map<PipelineRegister, CycleInfo> registerCycles)
         {
             std::queue<Instruction> tempQueue;
             while (!InstructionsQueue.empty()) 
             {
-                if (InstructionsQueue.front().robValue == robValue) 
+                if (InstructionsQueue.front().RobValue == robValue) 
                 {
-                    InstructionsQueue.front().DestinationRegister.isReady = true;
+                    InstructionsQueue.front().DestinationRegister.IsReady = true;
                     InstructionsQueue.front().registerCycles = registerCycles;
                 }
                 tempQueue.push(InstructionsQueue.front());
@@ -68,12 +71,14 @@ class ReorderBuffer : public InstructionsTable
             InstructionsQueue = tempQueue;
         }
 
+        /// @brief Gets whether the rob entry is present or not.
+        /// @param robValue Rob value.
         bool HasRobEntry(int robValue)
         {
             std::queue<Instruction> tempQueue = InstructionsQueue;
             while (!tempQueue.empty()) 
             {
-                if (tempQueue.front().robValue == robValue) 
+                if (tempQueue.front().RobValue == robValue) 
                 {
                     return true;
                 }
@@ -81,19 +86,6 @@ class ReorderBuffer : public InstructionsTable
             }
             return false;
         }
-
-        // void RemoveRobEntriesByReadyBits()
-        // {
-        //     if (!InstructionsQueue.front().isInstructionReady)
-        //     {
-        //         return;
-        //     }
-        //     while (InstructionsQueue.front().isInstructionReady)
-        //     {
-        //         lastRemovedElementIndex = InstructionsQueue.front().DestinationRegister.Value;
-        //         InstructionsQueue.pop();
-        //     }
-        // }
 };
 
 #endif
