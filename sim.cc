@@ -5,7 +5,7 @@
 #include <inttypes.h>
 #include <algorithm>
 #include "sim.h"
-#include "out_of_order_scheduler.h"
+#include "src/out_of_order_scheduler.h"
 
 int main (int argc, char* argv[])
 {
